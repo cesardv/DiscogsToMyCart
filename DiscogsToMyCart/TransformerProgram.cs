@@ -59,7 +59,7 @@ namespace DiscogsToMyCart
 
         private static void PrepareTrackInserts()
         {
-            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=60"))
+            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=300"))
             {
                 conn.Open();
                 foreach (var tuple in AlbumId2ReleaseId)
@@ -73,10 +73,10 @@ namespace DiscogsToMyCart
                     {
                         var trackNumber = rdr[0];
                         var trackname = rdr[1];
-                        var trkDuration = rdr[3];
+                        var trkDuration = rdr[2];
                         SqlTrackInsertData.Add(string.Format("INSERT INTO `album_meta` (trackname, tracklen, tracknum, albumid) VALUES ('{0}',{1},{2},{3});", trackname, trkDuration ?? 0, trackNumber ?? 0, tuple.Item1));
                     }
-
+                    rdr.Close();
                 }
 
             }
@@ -142,7 +142,7 @@ namespace DiscogsToMyCart
                         var sql_artistId = string.Format("SELECT DISTINCT `releases`.id, `joined_artists`, `title`,uri, uri150, notes FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'", artist);
                         var cmd = new MySqlCommand(sql_artistId, conn);
                         /* 
-                          SELECT `releases`.id,`joined_artists`,`title`,uri, uri150 
+                          SELECT `releases`.id,`joined_artists`,`title`,uri, uri150 notes
                           FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) 
                           WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'                         
                          */
@@ -154,7 +154,7 @@ namespace DiscogsToMyCart
                             var srt = reader[0].ToString();
                             var r = new Random();
                             AlbumId2ReleaseId.Add(new Tuple<int, int>(albumNo, Convert.ToInt32(srt)));
-                            SqlDataInserts.Add(string.Format("INSERT INTO `albums` (artist, name, picurl600, picurl, description, category, price, popular ) VALUES ('{0}','{1}','{2}','{3}',{4},'{5}',{6}, '{7}');", reader[1], reader[2], reader[3], reader[4], catindex, "9.99", r.Next(1, 6), reader[5]));
+                            SqlDataInserts.Add(string.Format("INSERT INTO `albums` (artist, name, picurl600, picurl, category, price, popular, description ) VALUES ('{0}','{1}','{2}','{3}',{4},'{5}',{6}, '{7}');", reader[1], reader[2], reader[3], reader[4], catindex, "9.99", r.Next(1, 6), reader[5]));
                         }
 
                         albumNo++;
