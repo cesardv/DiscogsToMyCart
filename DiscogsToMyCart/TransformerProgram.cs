@@ -27,7 +27,12 @@ namespace DiscogsToMyCart
         /// </summary>
         private static List<string> SqlDataInserts { get; set; }
 
-        private static Dictionary<string, List<int>> ArtistIdReleasesList { get; set; }
+        private static List<string> SqlTrackInsertData { get; set; }
+
+        /// <summary>
+        /// Gets or sets the MyCart album Id to the Release Id for adding later use when filling track names
+        /// </summary>
+        private static List<Tuple<int, int>> AlbumId2ReleaseId { get; set; }
 
         /// <summary>
         /// Main entry in to the program.
@@ -37,11 +42,58 @@ namespace DiscogsToMyCart
         {
             SetGenreArtists();
 
+            SqlDataInserts = new List<string>();
+            SqlTrackInsertData = new List<string>();
+
+            AlbumId2ReleaseId = new List<Tuple<int, int>>();
+            
             GetMysqlAlbums();
-
-
             WriteToAlbumsFile();
+
+            PrepareTrackInserts();
+            WriteTrackInsertData();
+
             Console.WriteLine("We're done... press any key to exit...");
+            Console.ReadKey();
+        }
+
+        private static void PrepareTrackInserts()
+        {
+            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=60"))
+            {
+                conn.Open();
+                foreach (var tuple in AlbumId2ReleaseId)
+                {
+                    var getTrackSql = string.Format("SELECT `position`,`title`,`duration` FROM  `releases_tracks` WHERE `release`={0};", tuple.Item2);
+                    var sqlcmd = new MySqlCommand(getTrackSql, conn);
+
+                    var rdr = sqlcmd.ExecuteReader();
+
+                    while (rdr.Read())
+                    {
+                        var trackNumber = rdr[0];
+                        var trackname = rdr[1];
+                        var trkDuration = rdr[3];
+                        SqlTrackInsertData.Add(string.Format("INSERT INTO `album_meta` (trackname, tracklen, tracknum, albumid) VALUES ('{0}',{1},{2},{3});", trackname, trkDuration ?? 0, trackNumber ?? 0, tuple.Item1));
+                    }
+
+                }
+
+            }
+        }
+
+        private static void WriteTrackInsertData()
+        {
+            //generates timebased filename
+            var now = DateTime.Now;
+            var filepath = Environment.ExpandEnvironmentVariables("%userprofile%") + @"\Desktop\InsertTacksSQL-" + now.Year
+                + now.Month + now.Day + "-" + now.Hour + now.Minute + "." + now.Millisecond + ".txt";
+
+
+
+            File.WriteAllLines(filepath, SqlTrackInsertData);
+
+            Console.WriteLine("It's done...\n Find the output here: {0}", filepath);
             Console.ReadKey();
         }
 
@@ -49,7 +101,7 @@ namespace DiscogsToMyCart
         {
             //generates timebased filename
             var now = DateTime.Now;
-            var filepath = Environment.ExpandEnvironmentVariables("%userprofile%") + @"\Desktop\-" + now.Year
+            var filepath = Environment.ExpandEnvironmentVariables("%userprofile%") + @"\Desktop\ALBUMdata-" + now.Year
                 + now.Month + now.Day + "-" + now.Hour + now.Minute + "." + now.Millisecond + ".txt";
 
             File.WriteAllLines(filepath, SqlDataInserts);
@@ -60,7 +112,7 @@ namespace DiscogsToMyCart
 
         private static void GetMysqlAlbums()
         {
-            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=60"))
+            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=240"))
             {
                 var electronicArtist = GenreArtists["Electronic"];
                 var hiphop = GenreArtists["Hip-Hop"];
@@ -87,7 +139,7 @@ namespace DiscogsToMyCart
                     foreach (var artist in genreArtists)
                     {
                         // conn.open()
-                        var sql_artistId = string.Format("SELECT DISTINCT `releases`.id, `joined_artists`, `title`,uri, uri150 FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'", artist);
+                        var sql_artistId = string.Format("SELECT DISTINCT `releases`.id, `joined_artists`, `title`,uri, uri150, notes FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'", artist);
                         var cmd = new MySqlCommand(sql_artistId, conn);
                         /* 
                           SELECT `releases`.id,`joined_artists`,`title`,uri, uri150 
@@ -99,7 +151,10 @@ namespace DiscogsToMyCart
 
                         while (reader.Read())
                         {
-                            Console.WriteLine("ReleaseId: {0}   Artist: {1}   albumTitle: {2}   uri: {3}  uri150: {4} - albumID:{5}", reader[0], reader[1], reader[2], reader[3], reader[4], albumNo);
+                            var srt = reader[0].ToString();
+                            var r = new Random();
+                            AlbumId2ReleaseId.Add(new Tuple<int, int>(albumNo, Convert.ToInt32(srt)));
+                            SqlDataInserts.Add(string.Format("INSERT INTO `albums` (artist, name, picurl600, picurl, description, category, price, popular ) VALUES ('{0}','{1}','{2}','{3}',{4},'{5}',{6}, '{7}');", reader[1], reader[2], reader[3], reader[4], catindex, "9.99", r.Next(1, 6), reader[5]));
                         }
 
                         albumNo++;
