@@ -6,6 +6,7 @@ namespace DiscogsToMyCart
     using System.Collections.Generic;
     using System.Collections.Specialized;
     using System.Data;
+    using System.IO;
     using System.Linq;
 
     using MySql.Data.MySqlClient;
@@ -24,9 +25,9 @@ namespace DiscogsToMyCart
         /// <summary>
         /// Get or sets the data turned into mycart-ready inserts
         /// </summary>
-        private static string SqlDataInserts { get; set; }
+        private static List<string> SqlDataInserts { get; set; }
 
-        private static Dictionary<int, List<int> ArtistIdReleasesList { get; set; }
+        private static Dictionary<string, List<int>> ArtistIdReleasesList { get; set; }
 
         /// <summary>
         /// Main entry in to the program.
@@ -39,14 +40,27 @@ namespace DiscogsToMyCart
             GetMysqlAlbums();
 
 
-
+            WriteToAlbumsFile();
             Console.WriteLine("We're done... press any key to exit...");
+            Console.ReadKey();
+        }
+
+        private static void WriteToAlbumsFile()
+        {
+            //generates timebased filename
+            var now = DateTime.Now;
+            var filepath = Environment.ExpandEnvironmentVariables("%userprofile%") + @"\Desktop\-" + now.Year
+                + now.Month + now.Day + "-" + now.Hour + now.Minute + "." + now.Millisecond + ".txt";
+
+            File.WriteAllLines(filepath, SqlDataInserts);
+
+            Console.WriteLine("It's done...\n Find the output here: {0}", filepath);
             Console.ReadKey();
         }
 
         private static void GetMysqlAlbums()
         {
-            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;"))
+            using (var conn = new MySqlConnection("server=localhost;user=adminuser;database=discogs;port=3306;password=123adminu;default command timeout=60"))
             {
                 var electronicArtist = GenreArtists["Electronic"];
                 var hiphop = GenreArtists["Hip-Hop"];
@@ -59,7 +73,7 @@ namespace DiscogsToMyCart
                 var reggae = GenreArtists["Reggae"];
                 
                 var lists = new ArrayList();
-                lists.AddRange(new List<List<string>>() { electronicArtist, hiphop, misc, jazz, rocksArtists, latin, funk,pop, reggae });
+                lists.AddRange(new List<List<string>>() { electronicArtist, hiphop, misc, jazz, rocksArtists, latin, funk, pop, reggae });
                 conn.Open();
                 var catindex = 1;
                 foreach (var list in GenreArtists)
@@ -67,23 +81,34 @@ namespace DiscogsToMyCart
                     // Console.WriteLine(list.Key);
                     // Console.WriteLine(GenreArtists.ElementAt(5).Key);
                     var genreArtists = list.Value;
+                    var albumNo = 1;
+
+
                     foreach (var artist in genreArtists)
                     {
                         // conn.open()
-                        var sql_artistId = string.Format("SELECT id FROM `artists` WHERE name='{0}'", artist);
+                        var sql_artistId = string.Format("SELECT DISTINCT `releases`.id, `joined_artists`, `title`,uri, uri150 FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'", artist);
                         var cmd = new MySqlCommand(sql_artistId, conn);
+                        /* 
+                          SELECT `releases`.id,`joined_artists`,`title`,uri, uri150 
+                          FROM  `releases` JOIN `releases_images` ON (`releases`.id=`releases_images`.release) 
+                          WHERE  `joined_artists` =  '{0}' AND  `country` =  'US'                         
+                         */
+                        
                         var reader = cmd.ExecuteReader();
 
                         while (reader.Read())
                         {
-                            ArtistIdReleasesList.Add((int)reader[0], new List<int>());
+                            Console.WriteLine("ReleaseId: {0}   Artist: {1}   albumTitle: {2}   uri: {3}  uri150: {4} - albumID:{5}", reader[0], reader[1], reader[2], reader[3], reader[4], albumNo);
                         }
 
+                        albumNo++;
+                        reader.Close();
                     } // now all artist ID are the Keys of ArtistIdReleases
                     catindex++;
                 }
 
-            }
+            } // end of connection
         }
 
         /// <summary>
